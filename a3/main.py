@@ -20,8 +20,6 @@ import numpy as np
 
 headerText = 'my compressed image - v1.0'
 
-
-
 # Compress an image
 
 
@@ -49,30 +47,102 @@ def compress( inputFile, outputFile ):
   # multi-channel case.
 
   startTime = time.time()
- 
-  outputBytes = bytearray()
 
-  for y in range(img.shape[0]):
+  dimensions = len(img.shape)
+
+  # if single channel
+  if dimensions == 2:
+
+    dict = {}
+    dict_index = 0
+
+    for i in range (-255,256):
+        dict[i+255] = bytes(i)
+        dict_index = i + 255
+
+    outputBytes = bytearray()
+
+    # p is the byte pattern that will be passed into the dictionary
+    p = bytearray()
+    p_c = bytearray()
+
     for x in range(img.shape[1]):
-      for c in range(img.shape[2]):
-        outputBytes.append( img[y,x,c] )
+      for y in range(img.shape[0]):
+
+        # c is the current byte being analyzed
+        c = bytes(img[x][y])
+
+        # if the dictionary is within the specified size
+        if dict_index < 65535:
+
+            # ------------------------------------------------------------------------------------------------------
+            # Hey dude, this if statement is where I get confused, I don't know if we're supposed to be dealing with
+            # bytes here or not. The "if c in dict.values()" statement seems to get entered every time and I can't
+            # figure out why
+            # ------------------------------------------------------------------------------------------------------
+            p_c = bytes(p + c)
+
+            # if the character c is already in the dictionary add it to the present character stream
+            if p_c in dict.values():
+                p = p_c
+            else:
+                dict_index += 1
+                outputBytes.append(p)
+                dict[dict_index] = p
+                p = c
+
+    # Output the bytes
+    #
+    # Include the 'headerText' to identify the type of file.  Include
+    # the rows, columns, channels so that the image shape can be
+    # reconstructed.
+
+    outputFile.write('%s\n' % headerText)
+    outputFile.write('%d %d\n' % (img.shape[0], img.shape[1]))
+    outputFile.write(outputBytes)
+
+    # Print information about the compression
+
+    inSize = img.shape[0] * img.shape[1]
+
+    outputBytes.append(img[y, x])
+
+    outSize = len(outputBytes)
+
+
+  # if multichannel
+  elif dimensions == 3:
+
+    dict = {}
+
+    for i in range (-255,256):
+        dict[i+255] = i
+        print(dict[i+255])
+
+    outputBytes = bytearray()
+
+    for y in range(img.shape[0]):
+      for x in range(img.shape[1]):
+        for c in range(img.shape[2]):
+          outputBytes.append(img[y, x, c])
+
+    # Output the bytes
+    #
+    # Include the 'headerText' to identify the type of file.  Include
+    # the rows, columns, channels so that the image shape can be
+    # reconstructed.
+
+    outputFile.write('%s\n' % headerText)
+    outputFile.write('%d %d %d\n' % (img.shape[0], img.shape[1], img.shape[2]))
+    outputFile.write(outputBytes)
+
+    # Print information about the compression
+
+    inSize = img.shape[0] * img.shape[1] * img.shape[2]
+    outSize = len(outputBytes)
+  
 
   endTime = time.time()
-
-  # Output the bytes
-  #
-  # Include the 'headerText' to identify the type of file.  Include
-  # the rows, columns, channels so that the image shape can be
-  # reconstructed.
-
-  outputFile.write( '%s\n'       % headerText )
-  outputFile.write( '%d %d %d\n' % (img.shape[0], img.shape[1], img.shape[2]) )
-  outputFile.write( outputBytes )
-
-  # Print information about the compression
-  
-  inSize  = img.shape[0] * img.shape[1] * img.shape[2]
-  outSize = len(outputBytes)
 
   sys.stderr.write( 'Input size:         %d bytes\n' % inSize )
   sys.stderr.write( 'Output size:        %d bytes\n' % outSize )
@@ -142,7 +212,7 @@ if sys.argv[2] == '-':
   inputFile = sys.stdin
 else:
   try:
-    inputFile = open( sys.argv[2], 'r' )
+    inputFile = open( sys.argv[2], 'rb' )
   except:
     sys.stderr.write( "Could not open input file '%s'.\n" % sys.argv[2] )
     sys.exit(1)
@@ -153,7 +223,7 @@ if sys.argv[3] == '-':
   outputFile = sys.stdout
 else:
   try:
-    outputFile = open( sys.argv[3], 'w' )
+    outputFile = open( sys.argv[3], 'wb' )
   except:
     sys.stderr.write( "Could not open output file '%s'.\n" % sys.argv[3] )
     sys.exit(1)
