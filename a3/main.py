@@ -11,7 +11,7 @@
 #   python netpbm.py images/cortex.pnm
 
 
-import sys, os, math, time, netpbm
+import sys, os, math, time, netpbm,struct
 import numpy as np
 
 
@@ -53,93 +53,113 @@ def compress( inputFile, outputFile ):
   # if single channel
   if dimensions == 2:
 
-    dict = {}
+    # Empty dictionary
+    d = {}
+    # Current dictionary index
     dict_index = 0
+    # Previous value
+    prev = 0
 
-    for i in range (-255,256):
-        dict[i+255] = bytes(i)
-        dict_index = i + 255
+    for i in range(-255, 256):
+      # Stores the binary value
+      d[(struct.pack('>h',i))]=i+255
+      dict_index = i + 255
+
 
     outputBytes = bytearray()
-
-    # p is the byte pattern that will be passed into the dictionary
-    p = bytearray()
-    p_c = bytearray()
-
-    for x in range(img.shape[1]):
-      for y in range(img.shape[0]):
-
-        # c is the current byte being analyzed
-        c = bytes(img[x][y])
-
-        # if the dictionary is within the specified size
-        if dict_index < 65535:
-
-            # ------------------------------------------------------------------------------------------------------
-            # Hey dude, this if statement is where I get confused, I don't know if we're supposed to be dealing with
-            # bytes here or not. The "if c in dict.values()" statement seems to get entered every time and I can't
-            # figure out why
-            # ------------------------------------------------------------------------------------------------------
-            p_c = bytes(p + c)
-
-            # if the character c is already in the dictionary add it to the present character stream
-            if p_c in dict.values():
-                p = p_c
-            else:
-                dict_index += 1
-                outputBytes.append(p)
-                dict[dict_index] = p
-                p = c
-
-    # Output the bytes
-    #
-    # Include the 'headerText' to identify the type of file.  Include
-    # the rows, columns, channels so that the image shape can be
-    # reconstructed.
-
-    outputFile.write('%s\n' % headerText)
-    outputFile.write('%d %d\n' % (img.shape[0], img.shape[1]))
-    outputFile.write(outputBytes)
-
-    # Print information about the compression
-
-    inSize = img.shape[0] * img.shape[1]
-
-    outputBytes.append(img[y, x])
-
-    outSize = len(outputBytes)
-
-
-  # if multichannel
-  elif dimensions == 3:
-
-    dict = {}
-
-    for i in range (-255,256):
-        dict[i+255] = i
-        print(dict[i+255])
-
-    outputBytes = bytearray()
+      # p is the byte pattern that will be passed into the dictionary
+    p = ""
+    p_c = ""
 
     for y in range(img.shape[0]):
       for x in range(img.shape[1]):
-        for c in range(img.shape[2]):
-          outputBytes.append(img[y, x, c])
 
-    # Output the bytes
-    #
-    # Include the 'headerText' to identify the type of file.  Include
-    # the rows, columns, channels so that the image shape can be
-    # reconstructed.
+        # c is the current byte being analyzed
+        c = int(img[y][x])-int(prev)
+        prev=img[y][x]
 
-    outputFile.write('%s\n' % headerText)
+        bc= struct.pack('>h', c)
+        p_c = p + bc
+
+          # if the character c is already in the dictionary add it to the present character stream
+        if p_c in d:
+          p = p_c
+        else:
+          val = struct.pack('>H', d[p])
+          b1, b2 = struct.unpack('>BB', val)
+          outputBytes.append(b1)
+          outputBytes.append(b2)
+          if dict_index<65535:
+            dict_index += 1
+            d[p_c] = dict_index
+          p = bc
+    outputFile.write('%d %d\n' % (img.shape[0], img.shape[1]))
+    outputBytes.append(img[y, x])
+
+
+  # if multichannel
+  elif dimensions > 2:
+
+    # Empty dictionary
+    d = {}
+    # Current dictionary index
+    dict_index = 0
+
+    # Previous values
+    prev = []
+
+    for i in range(img.shape[2]):
+      prev.append(0)
+
+    for i in range(-255, 256):
+      # Stores the binary value
+      d[(struct.pack('>h', i))] = i + 255
+      dict_index = i + 255
+
+    outputBytes = bytearray()
+    # p is the byte pattern that will be passed into the dictionary
+    p = ""
+    p_c = ""
+
+    for y in range(img.shape[0]):
+      for x in range(img.shape[1]):
+        for channel in range(img.shape[2]):
+
+          # c is the current byte being analyzed
+          c = int(img[y][x][channel]) - int(prev[channel])
+          prev[channel] = img[y][x][channel]
+
+          bc = struct.pack('>h', c)
+          p_c = p + bc
+
+          # if the character c is already in the dictionary add it to the present character stream
+          if p_c in d:
+            p = p_c
+          else:
+            val = struct.pack('>H', d[p])
+            b1, b2 = struct.unpack('>BB', val)
+            outputBytes.append(b1)
+            outputBytes.append(b2)
+            if dict_index < 65535:
+              dict_index += 1
+              d[p_c] = dict_index
+            p = bc
     outputFile.write('%d %d %d\n' % (img.shape[0], img.shape[1], img.shape[2]))
-    outputFile.write(outputBytes)
+    outputBytes.append(img[y, x, channel])
 
-    # Print information about the compression
+  # Output the bytes
+  #
+  # Include the 'headerText' to identify the type of file.  Include
+  # the rows, columns, channels so that the image shape can be
+  # reconstructed.
 
-    inSize = img.shape[0] * img.shape[1] * img.shape[2]
-    outSize = len(outputBytes)
+  outputFile.write('%s\n' % headerText)
+  outputFile.write(outputBytes)
+
+  # Print information about the compression
+  inSize = img.shape[0] * img.shape[1]
+
+  outSize = len(outputBytes)
   
 
   endTime = time.time()
@@ -237,3 +257,4 @@ elif sys.argv[1] == 'u':
 else:
   sys.stderr.write( 'Usage: main.py c|u {input image filename} {output image filename}\n' )
   sys.exit(1)
+
